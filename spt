@@ -1,0 +1,75 @@
+#!/bin/sh
+
+PATH=""
+NAME=""
+
+install() {
+    # TODO: find way to silence output but still enter sudo passwe
+    read -p "done\ninstall new build? (y/n): " OPTION
+    [ "$OPTION" = "y" ] && make > /dev/null && \
+        sudo make clean install > /dev/null && \ 
+        echo "new binary successfully created"
+}
+
+merge_all() {
+    git checkout master > /dev/null    
+    BRANCHES=$(git branch --list | grep -v master | xargs)
+    for i in $BRANCHES; do
+        git merge $i -m $i
+    done
+    echo "all branches successfully merged"
+}
+
+clean() {
+    make clean && rm -f config.h && git reset --hard origin/master
+}
+apply_patch() {
+    git checkout master > /dev/null    
+    clean
+    git branch $NAME && \
+        echo "created branch '$NAME'"
+    git checkout $NAME 
+    git apply $PATH && \
+        echo "applied patch '$NAME'" || \
+        echo -e "\npatch '$PATH' failed to apply, please try again..." 
+    merge_all
+}
+
+remove_patch() {
+    echo here1
+    git checkout master > /dev/null    
+    echo here2
+    clean
+    echo here3
+    git branch -D $NAME > /dev/null && \
+        echo "branch '$NAME' deleted"
+    merge_all
+}
+
+check_usage() {
+    MSG="usage: spm --option PATCH_NAME [PATH_TO_PATCH]"
+    [ "$#" -ne "2" ] && [ "$#" -ne "3" ] && echo -e "error: wrong number of arguments\n$MSG" && exit 0
+    [ "$#" = 3 ] && [ ! -f "$3" ] && \
+        echo -e "error: path to patch does not exist\n$MSG" && exit 0
+}
+
+# echo "$#"
+# echo "$1"
+# echo "$2"
+# echo "$3"
+# check_usage
+NAME=$2
+
+case $1 in 
+    "--add")
+        PATH="$3"
+        apply_patch
+        ;;
+    "--rm")
+        remove_patch
+        ;; 
+    *)
+        echo "option '$1' not found, please refer to README"
+        ;;
+esac
+
