@@ -1,23 +1,29 @@
 #!/bin/sh
+# Shell script to automate adding, removing, and installing patches to suckless software 
+# sawatkins
 
-PATH=""
-NAME=""
+PATCH_PATH=""
+PATCH_NAME=""
 
 install() {
-    # TODO: find way to silence output but still enter sudo passwe
-    read -p "done\ninstall new build? (y/n): " OPTION
-    [ "$OPTION" = "y" ] && make > /dev/null && \
-        sudo make clean install > /dev/null && \ 
-        echo "new binary successfully created"
+    read -p "build and install new binary? (y/n): " OPTION
+    if [ "$OPTION" = "y" ]; then
+        make > /dev/null &&
+        sudo make clean install > /dev/null &&
+        echo "new binary successfully installed"
+    else
+        echo "no new binary installed"
+    fi 
 }
 
 merge_all() {
     git checkout master > /dev/null    
     BRANCHES=$(git branch --list | grep -v master | xargs)
     for i in $BRANCHES; do
-        git merge $i -m $i
+        git merge "$i" -m "$i"
     done
     echo "all branches successfully merged"
+    install
 }
 
 clean() {
@@ -26,50 +32,46 @@ clean() {
 apply_patch() {
     git checkout master > /dev/null    
     clean
-    git branch $NAME && \
-        echo "created branch '$NAME'"
-    git checkout $NAME 
-    git apply $PATH && \
-        echo "applied patch '$NAME'" || \
-        echo -e "\npatch '$PATH' failed to apply, please try again..." 
-    merge_all
+    git branch $PATCH_NAME && \
+        echo "created branch '$PATCH_NAME'"
+    git checkout $PATCH_NAME 
+    if git apply $PATCH_PATH; then
+       merge_all 
+    else
+        echo -e "\nPATCH '$PATCH_PATH' FAILED TO APPLY!"
+        read -p "press 'enter' to delete branch and merge prev build..."
+        remove_patch
+    fi
 }
 
 remove_patch() {
-    echo here1
     git checkout master > /dev/null    
-    echo here2
     clean
-    echo here3
-    git branch -D $NAME > /dev/null && \
-        echo "branch '$NAME' deleted"
+    git branch -D $PATCH_NAME > /dev/null && \
+        echo "branch '$PATCH_NAME' deleted"
     merge_all
 }
 
 check_usage() {
-    MSG="usage: spm --option PATCH_NAME [PATH_TO_PATCH]"
-    [ "$#" -ne "2" ] && [ "$#" -ne "3" ] && echo -e "error: wrong number of arguments\n$MSG" && exit 0
-    [ "$#" = 3 ] && [ ! -f "$3" ] && \
-        echo -e "error: path to patch does not exist\n$MSG" && exit 0
+    MSG="usage: spm option PATCH_NAME /path/to/program/directory [Optional: /path/to/patch]"
+    if [ "$#" -ne 3 ] && [ "$#" -ne 4 ]; then
+        echo -e "wrong number of argumets\n$MSG" && exit
+    elif [ ! -d "$(realpath -q $3)" ]; then 
+        echo -e "check path to git repo\n$MSG" && exit
+    elif [ "$#" -eq 4 ] && [ ! -f "$(realpath -q $4)" ]; then
+        echo -e "check path to patch\n$MSG" && exit
+    elif [ "$1" = "add" ] && [ "$#" -eq 3 ]; then
+        echo -e "wrong num of arguments for 'add'\n$MSG" && exit
+    fi
 }
 
-# echo "$#"
-# echo "$1"
-# echo "$2"
-# echo "$3"
-# check_usage
-NAME=$2
+check_usage $1 $2 $3 $4
+PATCH_NAME="$2"
+PATCH_PATH=$(realpath -q $4)
+cd "$(realpath -q $3)"
 
 case $1 in 
-    "--add")
-        PATH="$3"
-        apply_patch
-        ;;
-    "--rm")
-        remove_patch
-        ;; 
-    *)
-        echo "option '$1' not found, please refer to README"
-        ;;
+    "add")  apply_patch;;
+    "rm")   remove_patch;;
+    *)      echo "option '$1' not found, please refer to README";;
 esac
-
